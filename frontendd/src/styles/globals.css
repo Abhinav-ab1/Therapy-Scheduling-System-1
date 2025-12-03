@@ -1,0 +1,98 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap");
+@import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css");
+
+:root {
+  --primary-green: #50b89b;
+  --primary-orange: #f26d32;
+  --light-bg: #f8f7f2;
+  --card-bg: #ffffff;
+  --text-dark: #2c2c2c;
+  --text-light: #5a5a5a;
+  --border-color: #e6e6e6;
+  --shadow-light: rgba(0, 0, 0, 0.05);
+  --shadow-hover: rgba(0, 0, 0, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Poppins", sans-serif;
+  color: var(--text-dark);
+  background-color: var(--light-bg);
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.btn {
+  padding: 10px 25px;
+  border-radius: 50px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.3s ease, background-color 0.3s ease,
+    box-shadow 0.3s ease;
+  border: none;
+  cursor: pointer;
+  display: inline-block;
+  text-align: center;
+}
+
+.btn-demo {
+  background-color: var(--primary-orange);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(242, 109, 50, 0.2);
+}
+
+.btn-demo:hover {
+  transform: translateY(-2px);
+  background-color: #d85c29;
+  box-shadow: 0 6px 15px rgba(242, 109, 50, 0.3);
+}
+
+.btn-login {
+  background-color: transparent;
+  border: 2px solid var(--primary-green);
+  color: var(--primary-green);
+}
+
+.btn-login:hover {
+  transform: translateY(-2px);
+  background-color: var(--primary-green);
+  color: #fff;
+}
+
+.btn-primary {
+  background-color: var(--primary-orange);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(242, 109, 50, 0.2);
+}
+
+.btn-primary:hover {
+  background-color: #d85c29;
+  box-shadow: 0 6px 15px rgba(242, 109, 50, 0.3);
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  border: 2px solid var(--text-dark);
+  color: var(--text-dark);
+}
+
+.btn-secondary:hover {
+  background-color: var(--text-dark);
+  color: #fff;
+  transform: translateY(-2px);
+}

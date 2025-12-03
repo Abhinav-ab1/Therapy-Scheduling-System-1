@@ -1,0 +1,662 @@
+:root {
+  --light-bg: #f5f8ff;
+  --card-bg: #fff;
+  --primary-green: #50b89b;
+  --primary-orange: #f26d32;
+  --text-dark: #333;
+  --text-light: #666;
+  --border-color: #e1e1e1;
+  --shadow-light: rgba(0, 0, 0, 0.05);
+  --shadow-hover: rgba(0, 0, 0, 0.1);
+  --green-accent: #e8f7f2;
+  --orange-accent: #fef4e8;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Poppins", sans-serif;
+  background-color: var(--light-bg);
+  color: var(--text-dark);
+  line-height: 1.6;
+}
+
+.dashboard-container {
+  max-width: 1400px;
+  margin: 2rem auto;
+  padding: 0 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* === Dashboard Header === */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--card-bg);
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px var(--shadow-light);
+}
+
+.welcome-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome-text {
+  color: var(--text-light);
+  font-size: 1rem;
+}
+
+.user-name {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.user-email {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.dashboard-header .logo {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.dashboard-header .logo i {
+  color: var(--primary-green);
+  margin-right: 10px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.header-actions i {
+  font-size: 1.2rem;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.header-actions i:hover {
+  color: var(--primary-green);
+}
+
+.profile-pic-container {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 2px 5px var(--shadow-light);
+}
+
+.profile-pic {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.logout-button {
+  background: #e74c3c;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.3s ease;
+}
+
+.logout-button:hover {
+  background: #c0392b;
+}
+
+/* Alert Messages */
+.alert-message {
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.alert-success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.alert-error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* === Main Content Layout === */
+.main-content {
+  display: flex;
+  gap: 2rem;
+}
+
+.left-column {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.right-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* === Top Cards Section === */
+.top-cards-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.card {
+  background-color: var(--card-bg);
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px var(--shadow-light);
+  border: 1px solid var(--border-color);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  flex: 1;
+  min-width: 250px;
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 8px 25px var(--shadow-hover);
+}
+
+.card-content h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.card-content p {
+  color: var(--text-light);
+  font-size: 1.1rem;
+}
+
+.card-session .card-content {
+  text-align: center;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.progress-header i {
+  color: var(--primary-green);
+  font-size: 1.4rem;
+}
+
+.progress-bar-container {
+  background-color: var(--light-bg);
+  border-radius: 5px;
+  height: 8px;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: var(--primary-green);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.notif-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.notif-header i {
+  color: var(--primary-orange);
+  font-size: 1.4rem;
+}
+
+/* === Quick Stats Cards === */
+.quick-stats-cards {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.stat-card {
+  background-color: var(--card-bg);
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px var(--shadow-light);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px var(--shadow-hover);
+}
+
+.stat-card h3 {
+  font-size: 1rem;
+  color: var(--text-light);
+}
+
+.stat-card p {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+}
+
+.stat-card .card-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: var(--primary-green);
+}
+
+.stats-summary {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--primary-green);
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+/* === Create Slot Form === */
+.card-create-slot {
+  padding: 2rem;
+}
+
+.card-create-slot h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.card-create-slot p.slot-info {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  padding: 0.8rem;
+  background: var(--light-bg);
+  border-radius: 6px;
+  border-left: 3px solid var(--primary-green);
+}
+
+.card-create-slot form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.card-create-slot label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  display: block;
+  color: var(--text-dark);
+}
+
+.card-create-slot input,
+.card-create-slot select {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-family: "Poppins", sans-serif;
+  color: var(--text-dark);
+  font-size: 0.9rem;
+  background-color: var(--card-bg);
+}
+
+.card-create-slot input:focus,
+.card-create-slot select:focus {
+  outline: none;
+  border-color: var(--primary-green);
+}
+
+.btn-submit {
+  background-color: var(--primary-green);
+  color: #fff;
+  padding: 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.btn-submit:hover {
+  background-color: #439a82;
+  transform: translateY(-2px);
+}
+
+/* === Reschedule Requests === */
+.card-reschedule {
+  padding: 2rem;
+}
+
+.card-reschedule h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.reschedule-item {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--light-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.reschedule-item p {
+  margin-bottom: 0.8rem;
+  line-height: 1.6;
+}
+
+.reschedule-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-approve {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.3s ease;
+}
+
+.btn-approve:hover {
+  background: #218838;
+}
+
+.btn-reject {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.3s ease;
+}
+
+.btn-reject:hover {
+  background: #c82333;
+}
+
+/* === Appointments === */
+.card-appointments {
+  padding: 2rem;
+}
+
+.card-appointments h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.appointments-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.appointments-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.appointments-scroll::-webkit-scrollbar-track {
+  background: var(--light-bg);
+  border-radius: 4px;
+}
+
+.appointments-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.appointments-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-light);
+}
+
+.appointment-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--light-bg);
+  transition: background-color 0.3s ease;
+}
+
+.appointment-item:hover {
+  background: var(--green-accent);
+}
+
+.appointment-item p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.btn-complete {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.3s ease;
+}
+
+.btn-complete:hover {
+  background: #218838;
+}
+
+.slot-info {
+  color: var(--text-light);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+/* Status Classes */
+.status {
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-left: 8px;
+}
+
+.status-booked {
+  background: var(--green-accent);
+  color: var(--primary-green);
+}
+
+.status-completed {
+  background: #e8f5e8;
+  color: #4caf50;
+}
+
+.status-available {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.status-reschedule_requested {
+  background: var(--orange-accent);
+  color: var(--primary-orange);
+}
+
+/* Calendar Integration */
+.react-calendar {
+  width: 100%;
+  border: none;
+  margin-top: 10px;
+  font-family: "Poppins", sans-serif;
+}
+
+.calendar-badge {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.6rem;
+  background: var(--primary-green);
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 3px;
+  text-align: center;
+}
+
+/* === Responsive Design === */
+@media (max-width: 1024px) {
+  .dashboard-container {
+    padding: 0 1rem;
+  }
+
+  .main-content {
+    flex-direction: column;
+  }
+
+  .top-cards-section {
+    flex-direction: column;
+  }
+
+  .quick-stats-cards {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .stat-card {
+    flex: 1 1 45%;
+  }
+}
+
+@media (max-width: 768px) {
+  .stat-card {
+    flex: 1 1 100%;
+  }
+
+  .dashboard-header {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .header-actions {
+    justify-content: center;
+  }
+
+  .top-cards-section {
+    gap: 1rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .reschedule-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .btn-approve,
+  .btn-reject {
+    width: 100%;
+    padding: 10px;
+  }
+
+  .card-create-slot form {
+    gap: 0.8rem;
+  }
+
+  .card-create-slot input,
+  .card-create-slot select {
+    padding: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-container {
+    margin: 1rem auto;
+    padding: 0 1rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .appointment-item {
+    padding: 8px;
+  }
+
+  .card-create-slot {
+    padding: 1.5rem;
+  }
+
+  .card-reschedule {
+    padding: 1.5rem;
+  }
+
+  .card-appointments {
+    padding: 1.5rem;
+  }
+}
