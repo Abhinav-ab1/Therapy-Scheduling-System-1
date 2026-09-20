@@ -7,10 +7,6 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 
-// =========================================================
-// LOAD ENVIRONMENT VARIABLES
-// =========================================================
-
 dotenv.config();
 
 // =========================================================
@@ -67,16 +63,6 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // =========================================================
-// GLOBAL MIDDLEWARE
-// =========================================================
-
-app.use(
-  helmet({
-    crossOriginEmbedderPolicy: false,
-  })
-);
-
-// =========================================================
 // CORS
 // =========================================================
 
@@ -88,8 +74,8 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests without an origin
-    // such as Postman/server-to-server requests.
+    // Allow requests without Origin
+    // (Postman, server-to-server, etc.)
     if (!origin) {
       return callback(null, true);
     }
@@ -121,15 +107,76 @@ const corsOptions = {
   ],
 };
 
-// Normal CORS middleware
+// =========================================================
+// EXPLICIT PREFLIGHT HANDLER
+// =========================================================
+//
+// IMPORTANT:
+// This is placed before helmet, sessions, passport,
+// body parsing, and routes.
+//
+// It directly answers browser OPTIONS requests.
+
+app.use((req, res, next) => {
+  if (req.method !== "OPTIONS") {
+    return next();
+  }
+
+  const origin = req.headers.origin;
+
+  if (
+    origin &&
+    !allowedOrigins.includes(origin)
+  ) {
+    console.log("Blocked OPTIONS origin:", origin);
+
+    return res.status(403).json({
+      message: "CORS error: origin not allowed",
+    });
+  }
+
+  if (origin) {
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      origin
+    );
+  }
+
+  res.setHeader(
+    "Access-Control-Allow-Credentials",
+    "true"
+  );
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+  );
+
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
+
+  res.setHeader(
+    "Access-Control-Max-Age",
+    "86400"
+  );
+
+  return res.sendStatus(204);
+});
+
+// Normal CORS handling
 app.use(cors(corsOptions));
 
-// Explicitly handle CORS preflight requests
-app.options(/.*/, cors(corsOptions));
+// =========================================================
+// GLOBAL MIDDLEWARE
+// =========================================================
 
-// =========================================================
-// LOGGER
-// =========================================================
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
 app.use(morgan("dev"));
 
@@ -306,7 +353,6 @@ app.use(
       err
     );
 
-    // Handle CORS error
     if (
       err.message ===
       "Not allowed by CORS"
@@ -352,26 +398,17 @@ app.use(
 
 const initServer = async () => {
   try {
-    // -------------------------------------------------------
-    // CONNECT TO MONGODB ATLAS
-    // -------------------------------------------------------
-
     await connectMongoDB();
 
     console.log(
       "✅ MongoDB database ready"
     );
 
-    // -------------------------------------------------------
-    // START EXPRESS SERVER
-    // -------------------------------------------------------
-
     const server = app.listen(
       PORT,
       "0.0.0.0",
       () => {
         console.log("");
-
         console.log(
           "===================================="
         );
