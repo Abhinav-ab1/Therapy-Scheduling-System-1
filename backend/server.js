@@ -44,7 +44,10 @@ import scheduleRoutes from "./routes/scheduleRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 
+// =========================================================
 // AI ROUTE
+// =========================================================
+
 import aiRoutes from "./routes/aiRoutes.js";
 
 // =========================================================
@@ -83,42 +86,46 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests without an origin
-      // such as Postman/server-to-server requests.
-      if (!origin) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests without an origin
+    // such as Postman/server-to-server requests.
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      console.log("Blocked CORS origin:", origin);
+    console.log("Blocked CORS origin:", origin);
 
-      return callback(new Error("Not allowed by CORS"));
-    },
+    return callback(new Error("Not allowed by CORS"));
+  },
 
-    credentials: true,
+  credentials: true,
 
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "DELETE",
-      "PATCH",
-      "OPTIONS",
-    ],
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "PATCH",
+    "OPTIONS",
+  ],
 
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-    ],
-  })
-);
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+  ],
+};
+
+// Normal CORS middleware
+app.use(cors(corsOptions));
+
+// Explicitly handle CORS preflight requests
+app.options(/.*/, cors(corsOptions));
 
 // =========================================================
 // LOGGER
