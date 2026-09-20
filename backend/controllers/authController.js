@@ -4,157 +4,259 @@ import User from "../models/users.js";
 
 dotenv.config();
 
+// ==========================================
+// GENERATE JWT TOKEN
+// ==========================================
 
-//  Utility to sign JWT
- 
 const generateToken = (user) => {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
+    {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
+    {
+      expiresIn: process.env.JWT_EXPIRES_IN || "1d",
+    }
   );
 };
 
+// ==========================================
+// GET ALL USERS
+// ==========================================
 
-//  Get all users (no passwords)
- 
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll({ attributes: { exclude: ["password"] } });
-    res.json(users);
+    const users = await User.find().select("-password");
+
+    res.status(200).json(users);
   } catch (err) {
     console.error("Get users error:", err.message);
-    res.status(500).json({ error: "Server error" });
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 };
 
+// ==========================================
+// GET CURRENTLY LOGGED-IN USER
+// ==========================================
 
-//  Get currently logged-in user
- 
 export const getMe = async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({ message: "Unauthorized" });
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+    }
 
-    const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ["password"] }
-    });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const user = await User.findById(req.user._id).select("-password");
 
-    res.json(user);
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json(user);
   } catch (err) {
     console.error("Get me error:", err.message);
-    res.status(500).json({ error: "Server error" });
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 };
 
-//  Register new user
- 
+// ==========================================
+// REGISTER USER
+// ==========================================
+
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password, role, phone, dob } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email, and password are required" });
-    }
-
-    const existingUser = await User.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
-    }
-
-    const user = await User.create({
+    const {
       name,
       email,
-      password, // raw password; hashed in model hooks
-      role: role || "patient",
-      phone: phone || null,     
-      dob: dob || null,          
-      isVerified: role === "practitioner" ? false : true
-    });
+      password,
+      role,
+      phone,
+      dob,
+    } = req.body;
 
-    const token = generateToken(user);
-
-    res.status(201).json({
-      message: "User registered successfully",
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,        
-        dob: user.dob,            
-        isVerified: user.isVerified,
-        createdAt: user.createdAt
-      }
-    });
-  } catch (err) {
-    console.error("Register error:", err.message);
-    res.status(500).json({ error: "Server error" });
-  }
-};
-
-
- // Login user
- 
-export const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: "Name, email, and password are required",
+      });
     }
 
-    const user = await User.findOne({ where: { email } });
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+    // Check existing user
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
 
+    if (existingUser) {
+      return res.status(400).json({
+        message: "User already exists",
+      });
+    }
+
+    // Determine role
+    const userRole = role || "patient";
+
+    // Create user
+    const user = await User.create({
+      name,
+      email: normalizedEmail,
+      password,
+      role: userRole,
+      phone: phone || null,
+      dob: dob || null,
+      isVerified: userRole === "practitioner" ? false : true,
+    });
+
+    // Generate JWT
     const token = generateToken(user);
 
-    res.json({
+    // Response
+    res.status(201).json({
+      message: "User registered successfully",
+
       token,
+
       user: {
-        id: user.id,
+        id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        phone: user.phone,      
-        dob: user.dob,          
+        phone: user.phone,
+        dob: user.dob,
         isVerified: user.isVerified,
-        createdAt: user.createdAt
-      }
+        createdAt: user.createdAt,
+      },
     });
   } catch (err) {
-    console.error("Login error:", err.message);
-    res.status(500).json({ error: "Server error" });
+    console.error("Register error:", err);
+
+    // Duplicate email
+    if (err.code === 11000) {
+      return res.status(400).json({
+        message: "Email already exists",
+      });
+    }
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 };
 
+// ==========================================
+// LOGIN USER
+// ==========================================
 
- // OAuth success handler
- 
+export const loginUser = async (req, res) => {
+  try {
+    const {
+      email,
+      password,
+    } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email and password are required",
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find user
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid credentials",
+      });
+    }
+
+    // Compare password
+    const isMatch = await user.comparePassword(password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Invalid credentials",
+      });
+    }
+
+    // Generate JWT
+    const token = generateToken(user);
+
+    res.status(200).json({
+      message: "Login successful",
+
+      token,
+
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        dob: user.dob,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+
+    res.status(500).json({
+      error: "Server error",
+    });
+  }
+};
+
+// ==========================================
+// OAUTH SUCCESS
+// ==========================================
+
 export const oauthSuccess = async (req, res) => {
   try {
-    if (!req.user) return res.status(400).json({ message: "OAuth login failed" });
+    if (!req.user) {
+      return res.status(400).json({
+        message: "OAuth login failed",
+      });
+    }
 
     const token = generateToken(req.user);
 
-    res.json({
+    res.status(200).json({
+      message: "OAuth login successful",
+
       token,
+
       user: {
-        id: req.user.id,
+        id: req.user._id,
         name: req.user.name,
         email: req.user.email,
         role: req.user.role,
-        phone: req.user.phone,    
-        dob: req.user.dob,         
-        isVerified: req.user.isVerified
-      }
+        phone: req.user.phone,
+        dob: req.user.dob,
+        isVerified: req.user.isVerified,
+      },
     });
   } catch (err) {
-    console.error("OAuth success error:", err.message);
-    res.status(500).json({ error: "Server error" });
+    console.error("OAuth success error:", err);
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 };

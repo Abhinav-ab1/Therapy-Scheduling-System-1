@@ -5,86 +5,154 @@ import User from "../models/users.js";
 
 dotenv.config();
 
+// =========================================================
+// GOOGLE OAUTH STRATEGY
+// =========================================================
+
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
+
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: process.env.GOOGLE_CALLBACK_URL
+
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+
+      // Allows us to access req/session inside callback
+      passReqToCallback: true,
     },
-    async (accessToken, refreshToken, profile, done) => {
+
+    async (
+      req,
+      accessToken,
+      refreshToken,
+      profile,
+      done
+    ) => {
       try {
-        const email = profile.emails[0].value;
-        let user = await User.findOne({ where: { email } });
+        // ===================================================
+        // GET GOOGLE EMAIL
+        // ===================================================
 
+        const email =
+          profile?.emails?.[0]?.value?.toLowerCase();
 
-        if (!user) {
-          // Get role from session if available, else default to patient
-          let role = "patient";
-          if (typeof profile._json === "object" && profile._json.role) {
-            role = profile._json.role;
-          } else if (profile && profile.role) {
-            role = profile.role;
-          } else if (profile && profile._req && profile._req.session && profile._req.session.role) {
-            role = profile._req.session.role;
-          } else if (global._passport_role) {
-            role = global._passport_role;
-          } else if (User.sequelize.options && User.sequelize.options.role) {
-            role = User.sequelize.options.role;
-          } else if (User.role) {
-            role = User.role;
-          } else if (User.session && User.session.role) {
-            role = User.session.role;
-          } else if (User.req && User.req.session && User.req.session.role) {
-            role = User.req.session.role;
-          } else if (User.req && User.req.role) {
-            role = User.req.role;
-          } else if (User.req && User.req.query && User.req.query.role) {
-            role = User.req.query.role;
-          } else if (User.req && User.req.body && User.req.body.role) {
-            role = User.req.body.role;
-          } else if (User.req && User.req.headers && User.req.headers.role) {
-            role = User.req.headers.role;
-          } else if (User.req && User.req.headers && User.req.headers["x-role"]) {
-            role = User.req.headers["x-role"];
-          } else if (User.req && User.req.headers && User.req.headers["role"]) {
-            role = User.req.headers["role"];
-          } else if (User.req && User.req.headers && User.req.headers["x-user-role"]) {
-            role = User.req.headers["x-user-role"];
-          } else if (User.req && User.req.headers && User.req.headers["user-role"]) {
-            role = User.req.headers["user-role"];
-          } else if (User.req && User.req.headers && User.req.headers["x-userrole"]) {
-            role = User.req.headers["x-userrole"];
-          } else if (User.req && User.req.headers && User.req.headers["userrole"]) {
-            role = User.req.headers["userrole"];
-          } else if (User.req && User.req.headers && User.req.headers["x-role"]) {
-            role = User.req.headers["x-role"];
-          } else if (User.req && User.req.headers && User.req.headers["role"]) {
-            role = User.req.headers["role"];
-          }
-          user = await User.create({
-            name: profile.displayName,
-            email,
-            role: role,
-            isVerified: false
-          });
+        if (!email) {
+          return done(
+            new Error(
+              "Google account email was not provided"
+            ),
+            null
+          );
         }
 
+        // ===================================================
+        // FIND EXISTING USER
+        // ===================================================
+
+        let user = await User.findOne({
+          email,
+        });
+
+        // ===================================================
+        // IF USER DOES NOT EXIST → CREATE USER
+        // ===================================================
+
+        if (!user) {
+          // Default role
+          let role = "patient";
+
+          // -------------------------------------------------
+          // Get role from session
+          // -------------------------------------------------
+
+          if (
+            req?.session?.role === "practitioner" ||
+            req?.session?.role === "patient"
+          ) {
+            role = req.session.role;
+          }
+
+          // -------------------------------------------------
+          // Also support role from callback query
+          // -------------------------------------------------
+
+          if (
+            req?.query?.role === "practitioner" ||
+            req?.query?.role === "patient"
+          ) {
+            role = req.query.role;
+          }
+
+          // -------------------------------------------------
+          // Create MongoDB user
+          // -------------------------------------------------
+
+          user = await User.create({
+            name:
+              profile.displayName ||
+              "Google User",
+
+            email,
+
+            role,
+
+            isVerified: true,
+
+            // Google users don't need a password
+            password: null,
+          });
+
+          console.log(
+            `✅ New Google user created: ${email} (${role})`
+          );
+        } else {
+          console.log(
+            `✅ Existing Google user found: ${email} (${user.role})`
+          );
+        }
+
+        // ===================================================
+        // LOGIN USER
+        // ===================================================
+
         return done(null, user);
-      } catch (err) {
-        return done(err, null);
+      } catch (error) {
+        console.error(
+          "❌ Google authentication error:",
+          error
+        );
+
+        return done(error, null);
       }
     }
   )
 );
 
+// =========================================================
+// SERIALIZE USER
+// =========================================================
+
 passport.serializeUser((user, done) => {
-  done(null, user.id);
+  done(null, user._id.toString());
 });
 
+// =========================================================
+// DESERIALIZE USER
+// =========================================================
+
 passport.deserializeUser(async (id, done) => {
-  const user = await User.findByPk(id);
-  done(null, user);
+  try {
+    const user = await User.findById(id);
+
+    if (!user) {
+      return done(null, false);
+    }
+
+    return done(null, user);
+  } catch (error) {
+    return done(error, null);
+  }
 });
 
 export default passport;

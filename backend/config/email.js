@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 export const emailTransporter = nodemailer.createTransport({
   service: "SendGrid",
   auth: {
-    user: "kQ9AfbxLSyKu_J-qd1ZU9w", 
+    user: process.env.SENDGRID_USER || "apikey",
     pass: process.env.SENDGRID_API_KEY,
   },
 });

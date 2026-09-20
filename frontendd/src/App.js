@@ -1,105 +1,118 @@
 import React, { useEffect, useState } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+
 import Home from "./pages/Home";
 import BookDemo from "./pages/BookDemo";
 import Login from "./components/Login.jsx";
 import PatientDashboard from "./pages/PatientDashboard";
 import PractitionerDashboard from "./pages/PractitionerDashboard";
 import OAuthSuccess from "./pages/OAuthSuccess";
+
 import "./styles/globals.css";
 
-const API = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
-
-
-function AppContent() {
-  return (
-    <div className="App">
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/book-demo" element={<BookDemo />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/patient-dashboard" element={<PatientDashboard />} />
-        <Route
-          path="/practitioner-dashboard"
-          element={<PractitionerDashboard />}
-        />
-        <Route path="/oauth-success" element={<OAuthSuccess />} />
-      </Routes>
-      {/* Chatbot removed */}
-    </div>
-  );
-}
-
+const API =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Helper to build fetch options (supports both token and session)
-  const buildFetchOptions = (opts = {}) => {
-    const headers = opts.headers ?? {};
-    if (!headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  // =========================================================
+  // COMMON FETCH OPTIONS
+  // =========================================================
 
-    // Try token first, then fall back to session
+  const buildFetchOptions = (options = {}) => {
     const token = localStorage.getItem("token");
+
+    const headers = {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    };
+
     if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+      headers.Authorization = `Bearer ${token}`;
     }
 
     return {
-      credentials: "include", // keep cookie/session compatibility
-      ...opts,
+      ...options,
       headers,
+      credentials: "include",
     };
   };
 
-  // Check session when app loads
+  // =========================================================
+  // CHECK LOGIN WHEN APPLICATION STARTS
+  // =========================================================
+
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // First, try to get user from localStorage if token exists
         const token = localStorage.getItem("token");
         const storedUser = localStorage.getItem("user");
-        
+
+        // -----------------------------------------------------
+        // If token + user are already stored
+        // -----------------------------------------------------
+
         if (token && storedUser) {
           try {
             const parsedUser = JSON.parse(storedUser);
-            setUser(parsedUser);
-            setLoading(false);
-            return;
-          } catch (e) {
-            // Invalid stored user data, continue with API call
-            localStorage.removeItem("user");
+
+            if (parsedUser && parsedUser.role) {
+              setUser(parsedUser);
+              setLoading(false);
+              return;
+            }
+          } catch (error) {
+            console.log("Invalid stored user");
           }
+
+          localStorage.removeItem("user");
         }
 
-        // If no valid stored data, check with API
-        const response = await fetch(`${API}/api/auth/me`, buildFetchOptions({
-          method: "GET",
-        }));
+        // -----------------------------------------------------
+        // Otherwise ask backend who is logged in
+        // -----------------------------------------------------
 
-        if (response.ok) {
-          const userData = await response.json();
-          // auth route should return { user: {...} } or user object — handle both
-          const userObj = userData.user ?? userData;
-          setUser(userObj);
-          
-          // Store user data for future use
-          if (userObj) {
-            localStorage.setItem("user", JSON.stringify(userObj));
+        if (token) {
+          const response = await fetch(
+            `${API}/api/auth/me`,
+            buildFetchOptions({
+              method: "GET",
+            })
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+
+            const userData = data.user || data;
+
+            if (userData) {
+              setUser(userData);
+              localStorage.setItem(
+                "user",
+                JSON.stringify(userData)
+              );
+            }
+          } else {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            setUser(null);
           }
         } else {
-          // Clear any stale data
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
           setUser(null);
         }
       } catch (error) {
-        console.error("Auth check failed:", error);
-        // Clear any stale data on error
+        console.error("Authentication check failed:", error);
+
         localStorage.removeItem("token");
         localStorage.removeItem("user");
+
         setUser(null);
       } finally {
         setLoading(false);
@@ -109,74 +122,181 @@ function App() {
     checkAuth();
   }, []);
 
-  // Handle user updates from child components
+  // =========================================================
+  // LOGIN / LOGOUT USER UPDATE
+  // =========================================================
+
   const handleUserUpdate = (userData) => {
     setUser(userData);
+
     if (userData) {
-      localStorage.setItem("user", JSON.stringify(userData));
+      localStorage.setItem(
+        "user",
+        JSON.stringify(userData)
+      );
     } else {
       localStorage.removeItem("user");
       localStorage.removeItem("token");
     }
   };
 
+  // =========================================================
+  // LOADING SCREEN
+  // =========================================================
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p>Loading...</p>
+      <div className="loading-screen">
+        <div>
+          <h2>Loading AyurSutra...</h2>
+          <p>Please wait</p>
         </div>
       </div>
     );
   }
 
+  // =========================================================
+  // APPLICATION
+  // =========================================================
+
   return (
     <Router>
       <div className="App">
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/book-demo" element={<BookDemo setUser={handleUserUpdate} />} />
-          <Route path="/register" element={<BookDemo setUser={handleUserUpdate} />} />
 
-          {/* Login route (redirect when already logged in) */}
+        <Routes>
+
+          {/* =================================================
+              PUBLIC HOME
+          ================================================= */}
+
+          <Route
+            path="/"
+            element={
+              <Home
+                user={user}
+                setUser={handleUserUpdate}
+              />
+            }
+          />
+
+          {/* =================================================
+              REGISTER
+          ================================================= */}
+
+          <Route
+            path="/register"
+            element={
+              <BookDemo
+                setUser={handleUserUpdate}
+              />
+            }
+          />
+
+          {/* Keep old route working */}
+          <Route
+            path="/book-demo"
+            element={
+              <BookDemo
+                setUser={handleUserUpdate}
+              />
+            }
+          />
+
+          {/* =================================================
+              LOGIN
+          ================================================= */}
+
           <Route
             path="/login"
             element={
               user ? (
-                <Navigate to={user.role === "patient" ? "/patient-dashboard" : "/practitioner-dashboard"} replace />
+                <Navigate
+                  to={
+                    user.role === "practitioner"
+                      ? "/practitioner-dashboard"
+                      : "/patient-dashboard"
+                  }
+                  replace
+                />
               ) : (
-                <Login setUser={handleUserUpdate} />
+                <Login
+                  setUser={handleUserUpdate}
+                />
               )
             }
           />
 
-          {/* Protected routes */}
+          {/* =================================================
+              PATIENT DASHBOARD
+          ================================================= */}
+
           <Route
             path="/patient-dashboard"
             element={
-              user?.role === "patient" ? (
-                <PatientDashboard user={user} setUser={handleUserUpdate} />
+              user && user.role === "patient" ? (
+                <PatientDashboard
+                  user={user}
+                  setUser={handleUserUpdate}
+                />
               ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
-          <Route
-            path="/practitioner-dashboard"
-            element={
-              user?.role === "practitioner" ? (
-                <PractitionerDashboard user={user} setUser={handleUserUpdate} />
-              ) : (
-                <Navigate to="/login" replace />
+                <Navigate
+                  to="/login"
+                  replace
+                />
               )
             }
           />
 
-          {/* catch-all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* =================================================
+              PRACTITIONER DASHBOARD
+          ================================================= */}
+
+          <Route
+            path="/practitioner-dashboard"
+            element={
+              user && user.role === "practitioner" ? (
+                <PractitionerDashboard
+                  user={user}
+                  setUser={handleUserUpdate}
+                />
+              ) : (
+                <Navigate
+                  to="/login"
+                  replace
+                />
+              )
+            }
+          />
+
+          {/* =================================================
+              GOOGLE OAUTH
+          ================================================= */}
+
+          <Route
+            path="/oauth-success"
+            element={
+              <OAuthSuccess
+                setUser={handleUserUpdate}
+              />
+            }
+          />
+
+          {/* =================================================
+              UNKNOWN URL
+          ================================================= */}
+
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to="/"
+                replace
+              />
+            }
+          />
+
         </Routes>
+
       </div>
     </Router>
   );

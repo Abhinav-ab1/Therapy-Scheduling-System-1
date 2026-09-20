@@ -1,470 +1,1681 @@
-import React, { useState, useEffect } from "react";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-} from "chart.js";
-import { Line } from "react-chartjs-2";
-import Calendar from "react-calendar";
-import "react-calendar/dist/Calendar.css";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useNavigate } from "react-router-dom";
 import "../styles/PractitionerDashboard.css";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
+const API =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-const API = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
-// Time slots definition - 4-hour blocks
 const TIME_SLOTS = {
-  'morning': '8AM - 12PM',
-  'afternoon': '12PM - 5PM',
-  'evening': '5PM - 8PM'
-};
-
-// 2-hour intervals within each 4-hour block
-const TIME_INTERVALS = {
-  'morning': {
-    'morning_early': '8AM - 10AM',
-    'morning_late': '10AM - 12PM'
-  },
-  'afternoon': {
-    'afternoon_early': '12PM - 2PM',
-    'afternoon_late': '3PM - 5PM'
-  },
-  'evening': {
-    'evening_early': '5PM - 6:30PM',
-    'evening_late': '6:30PM - 8PM'
-  }
+  morning: "8 AM - 12 PM",
+  afternoon: "12 PM - 5 PM",
+  evening: "5 PM - 8 PM",
 };
 
 const PractitionerDashboard = ({ user, setUser }) => {
+  const navigate = useNavigate();
+
+  // =========================================================
+  // STATE
+  // =========================================================
+
   const [schedules, setSchedules] = useState([]);
-  const [newSlotDate, setNewSlotDate] = useState("");
-  const [newSlotTimeSlot, setNewSlotTimeSlot] = useState("");
+
   const [loading, setLoading] = useState(true);
-  const [showSuccess, setShowSuccess] = useState("");
-  
-  // Helper to build fetch options (supports both token and session)
-  const buildFetchOptions = (opts = {}) => {
-    const headers = opts.headers ?? {};
-    if (!headers["Content-Type"] && opts.body) headers["Content-Type"] = "application/json";
 
-    // Try token first, then fall back to session
-    const token = localStorage.getItem("token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+  const [creatingSlot, setCreatingSlot] = useState(false);
 
-    return {
-      credentials: "include", // keep cookie/session compatibility
-      ...opts,
-      headers,
-    };
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const [message, setMessage] = useState("");
+
+  const [error, setError] = useState("");
+
+  const [slotForm, setSlotForm] = useState({
+    date: "",
+    timeSlot: "",
+  });
+
+  const [currentMonth, setCurrentMonth] = useState(
+    new Date()
+  );
+
+  // =========================================================
+  // AUTHENTICATION
+  // =========================================================
+
+  const getToken = () => {
+    return localStorage.getItem("token");
   };
 
-  useEffect(() => {
-    fetchSchedules();
-  }, []);
+  const logout = useCallback(() => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
 
-  const fetchSchedules = async () => {
-    try {
-      const res = await fetch(`${API}/api/schedules/practitioner`, buildFetchOptions());
-      if (res.ok) {
-        const data = await res.json();
-        setSchedules(data);
-      } else {
-        console.error("Failed to fetch schedules:", res.statusText);
+    if (setUser) {
+      setUser(null);
+    }
+
+    navigate("/login", { replace: true });
+  }, [navigate, setUser]);
+
+  // =========================================================
+  // AUTHENTICATED FETCH
+  // =========================================================
+
+  const authFetch = useCallback(
+    async (url, options = {}) => {
+      const token = getToken();
+
+      if (!token) {
+        throw new Error(
+          "Your login session has expired. Please login again."
+        );
       }
+
+      const headers = {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+      };
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: "include",
+      });
+
+      // Token expired / invalid
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+
+        if (setUser) {
+          setUser(null);
+        }
+
+        navigate("/login", { replace: true });
+
+        throw new Error(
+          "Your login session has expired. Please login again."
+        );
+      }
+
+      return response;
+    },
+    [navigate, setUser]
+  );
+
+  // =========================================================
+  // LOAD PRACTITIONER SCHEDULES
+  // =========================================================
+
+  const loadSchedules = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = getToken();
+
+      // Prevent dashboard from calling protected API without token
+      if (!token) {
+        setError(
+          "Authorization token is missing. Please login again."
+        );
+
+        logout();
+        return;
+      }
+
+      const response = await authFetch(
+        `${API}/api/schedules/practitioner`,
+        {
+          method: "GET",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to load practitioner schedules"
+        );
+      }
+
+      /*
+        Backend may return either:
+
+        [
+          {...},
+          {...}
+        ]
+
+        or:
+
+        {
+          schedules: [...]
+        }
+      */
+
+      let scheduleData = [];
+
+      if (Array.isArray(data)) {
+        scheduleData = data;
+      } else if (Array.isArray(data.schedules)) {
+        scheduleData = data.schedules;
+      } else if (Array.isArray(data.data)) {
+        scheduleData = data.data;
+      }
+
+      setSchedules(scheduleData);
     } catch (err) {
-      console.error("fetchSchedules error:", err);
+      console.error(
+        "Load practitioner schedules error:",
+        err
+      );
+
+      setError(
+        err.message || "Unable to load practitioner schedules"
+      );
     } finally {
       setLoading(false);
     }
+  }, [authFetch, logout]);
+
+  // =========================================================
+  // INITIAL LOAD
+  // =========================================================
+
+  useEffect(() => {
+    // Make sure the logged-in account is actually a practitioner
+    if (user && user.role !== "practitioner") {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    loadSchedules();
+  }, [user, navigate, loadSchedules]);
+
+  // =========================================================
+  // LOGOUT
+  // =========================================================
+
+  const handleLogout = () => {
+    logout();
   };
+
+  // =========================================================
+  // CREATE SLOT FORM
+  // =========================================================
+
+  const handleSlotChange = (e) => {
+    const { name, value } = e.target;
+
+    setSlotForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
+  // =========================================================
+  // CREATE THERAPY SLOT
+  // =========================================================
 
   const handleCreateSlot = async (e) => {
     e.preventDefault();
-    if (!newSlotDate || !newSlotTimeSlot) {
-      setShowSuccess("❌ Please select both date and time slot");
-      setTimeout(() => setShowSuccess(""), 3000);
+
+    setMessage("");
+    setError("");
+
+    if (!slotForm.date) {
+      setError("Please select a therapy date.");
+      return;
+    }
+
+    if (!slotForm.timeSlot) {
+      setError("Please select a time slot.");
       return;
     }
 
     try {
-      const res = await fetch(`${API}/api/schedules/create-slot`, buildFetchOptions({
-        method: "POST",
-        body: JSON.stringify({ date: newSlotDate, timeSlot: newSlotTimeSlot }),
-      }));
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || "Failed to create slot");
-      
-      setShowSuccess("✅ New 4-hour availability block created successfully!");
-      setNewSlotDate("");
-      setNewSlotTimeSlot("");
-      await fetchSchedules(); // refresh schedules immediately
-      setTimeout(() => setShowSuccess(""), 3000);
+      setCreatingSlot(true);
+
+      const response = await authFetch(
+        `${API}/api/schedules/create-slot`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            date: slotForm.date,
+            timeSlot: slotForm.timeSlot,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Unable to create therapy slot"
+        );
+      }
+
+      setMessage(
+        "Therapy slot created successfully."
+      );
+
+      setSlotForm({
+        date: "",
+        timeSlot: "",
+      });
+
+      await loadSchedules();
     } catch (err) {
-      console.error("handleCreateSlot error:", err);
-      setShowSuccess(`❌ ${err.message}`);
-      setTimeout(() => setShowSuccess(""), 3000);
+      console.error("Create slot error:", err);
+
+      setError(
+        err.message || "Unable to create therapy slot"
+      );
+    } finally {
+      setCreatingSlot(false);
     }
   };
 
-  const handleApprove = async (id) => {
+  // =========================================================
+  // APPROVE RESCHEDULE
+  // =========================================================
+
+  const approveReschedule = async (scheduleId) => {
+    if (!scheduleId) {
+      setError("Invalid appointment.");
+      return;
+    }
+
     try {
-      const res = await fetch(`${API}/api/schedules/approve-reschedule`, buildFetchOptions({
-        method: "POST",
-        body: JSON.stringify({ scheduleId: id }),
-      }));
-      
-      if (res.ok) {
-        setShowSuccess("✅ Reschedule approved");
-        fetchSchedules();
-        setTimeout(() => setShowSuccess(""), 3000);
-      } else {
-        const data = await res.json();
-        throw new Error(data?.message || "Failed to approve reschedule");
+      setActionLoading(true);
+      setMessage("");
+      setError("");
+
+      const response = await authFetch(
+        `${API}/api/schedules/approve-reschedule`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            scheduleId,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Unable to approve reschedule"
+        );
       }
+
+      setMessage(
+        "Reschedule request approved successfully."
+      );
+
+      await loadSchedules();
     } catch (err) {
-      console.error("handleApprove error:", err);
-      setShowSuccess(`❌ ${err.message}`);
-      setTimeout(() => setShowSuccess(""), 3000);
+      console.error(
+        "Approve reschedule error:",
+        err
+      );
+
+      setError(
+        err.message || "Unable to approve reschedule"
+      );
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleReject = async (id) => {
+  // =========================================================
+  // REJECT RESCHEDULE
+  // =========================================================
+
+  const rejectReschedule = async (scheduleId) => {
+    if (!scheduleId) {
+      setError("Invalid appointment.");
+      return;
+    }
+
     try {
-      const res = await fetch(`${API}/api/schedules/reject-reschedule`, buildFetchOptions({
-        method: "POST",
-        body: JSON.stringify({ scheduleId: id }),
-      }));
-      
-      if (res.ok) {
-        setShowSuccess("✅ Reschedule rejected");
-        fetchSchedules();
-        setTimeout(() => setShowSuccess(""), 3000);
-      } else {
-        const data = await res.json();
-        throw new Error(data?.message || "Failed to reject reschedule");
+      setActionLoading(true);
+      setMessage("");
+      setError("");
+
+      const response = await authFetch(
+        `${API}/api/schedules/reject-reschedule`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            scheduleId,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Unable to reject reschedule"
+        );
       }
+
+      setMessage(
+        "Reschedule request rejected successfully."
+      );
+
+      await loadSchedules();
     } catch (err) {
-      console.error("handleReject error:", err);
-      setShowSuccess(`❌ ${err.message}`);
-      setTimeout(() => setShowSuccess(""), 3000);
+      console.error(
+        "Reject reschedule error:",
+        err
+      );
+
+      setError(
+        err.message || "Unable to reject reschedule"
+      );
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleComplete = async (id) => {
+  // =========================================================
+  // MARK THERAPY COMPLETED
+  // =========================================================
+
+  const markCompleted = async (scheduleId) => {
+    if (!scheduleId) {
+      setError("Invalid appointment.");
+      return;
+    }
+
     try {
-      const res = await fetch(`${API}/api/schedules/mark-completed`, buildFetchOptions({
-        method: "POST",
-        body: JSON.stringify({ scheduleId: id }),
-      }));
-      
-      if (res.ok) {
-        setShowSuccess("✅ Appointment marked as completed");
-        fetchSchedules();
-        setTimeout(() => setShowSuccess(""), 3000);
-      } else {
-        const data = await res.json();
-        throw new Error(data?.message || "Failed to mark as completed");
+      setActionLoading(true);
+      setMessage("");
+      setError("");
+
+      const response = await authFetch(
+        `${API}/api/schedules/mark-completed`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            scheduleId,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Unable to complete therapy"
+        );
       }
+
+      setMessage(
+        "Therapy marked as completed successfully."
+      );
+
+      await loadSchedules();
     } catch (err) {
-      console.error("handleComplete error:", err);
-      setShowSuccess(`❌ ${err.message}`);
-      setTimeout(() => setShowSuccess(""), 3000);
+      console.error(
+        "Mark completed error:",
+        err
+      );
+
+      setError(
+        err.message || "Unable to complete therapy"
+      );
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-  localStorage.removeItem("user");
-    setUser(null);
-    window.location.href = "/login";
+  // =========================================================
+  // DATE HELPERS
+  // =========================================================
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) {
+      return "-";
+    }
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   };
 
-  const formatSlotDisplay = (schedule) => {
-    const date = new Date(schedule.date).toLocaleDateString();
-    const timeSlotLabel = TIME_SLOTS[schedule.timeSlot] || schedule.timeSlot;
-    
-    // For practitioners, show the full 4-hour slot, but note if a specific interval was booked
-    let display = `${date} - ${timeSlotLabel}`;
-    if (schedule.bookedInterval) {
-      // Get the interval label from our mapping
-      const intervalLabel = getIntervalLabel(schedule.timeSlot, schedule.bookedInterval);
-      display += ` (Patient booked: ${intervalLabel})`;
-    } else if (schedule.notes && schedule.notes.includes("Booked for interval:")) {
-      const intervalMatch = schedule.notes.match(/Booked for interval: (.+)/);
-      if (intervalMatch) {
-        display += ` (Patient chose: ${intervalMatch[1]})`;
+  const getTimeSlotLabel = (timeSlot) => {
+    return TIME_SLOTS[timeSlot] || timeSlot || "-";
+  };
+
+  const getPatientName = (schedule) => {
+    if (schedule?.patientId?.name) {
+      return schedule.patientId.name;
+    }
+
+    return "Patient";
+  };
+
+  const getPatientEmail = (schedule) => {
+    if (schedule?.patientId?.email) {
+      return schedule.patientId.email;
+    }
+
+    return "No email";
+  };
+
+  // =========================================================
+  // UPCOMING APPOINTMENT CHECK
+  // =========================================================
+
+  const isUpcoming = (schedule) => {
+    if (!schedule?.date) {
+      return false;
+    }
+
+    const appointmentDate = new Date(
+      schedule.date
+    );
+
+    const now = new Date();
+
+    if (Number.isNaN(appointmentDate.getTime())) {
+      return false;
+    }
+
+    return (
+      appointmentDate >= now &&
+      (
+        schedule.status === "booked" ||
+        schedule.status === "reschedule_requested"
+      )
+    );
+  };
+
+  // =========================================================
+  // AVAILABLE SLOTS
+  // =========================================================
+
+  const availableSlots = useMemo(() => {
+    return schedules
+      .filter(
+        (schedule) =>
+          schedule.status === "available"
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.date) -
+          new Date(b.date)
+      );
+  }, [schedules]);
+
+  // =========================================================
+  // BOOKED APPOINTMENTS
+  // =========================================================
+
+  const bookedAppointments = useMemo(() => {
+    return schedules
+      .filter(
+        (schedule) =>
+          schedule.status === "booked"
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.date) -
+          new Date(b.date)
+      );
+  }, [schedules]);
+
+  // =========================================================
+  // COMPLETED THERAPIES
+  // =========================================================
+
+  const completedAppointments = useMemo(() => {
+    return schedules
+      .filter(
+        (schedule) =>
+          schedule.status === "completed"
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.date) -
+          new Date(a.date)
+      );
+  }, [schedules]);
+
+  // =========================================================
+  // RESCHEDULE REQUESTS
+  // =========================================================
+
+  const rescheduleRequests = useMemo(() => {
+    return schedules
+      .filter(
+        (schedule) =>
+          schedule.status ===
+          "reschedule_requested"
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.date) -
+          new Date(b.date)
+      );
+  }, [schedules]);
+
+  // =========================================================
+  // UPCOMING APPOINTMENTS
+  // =========================================================
+
+  const upcomingAppointments = useMemo(() => {
+    return schedules
+      .filter(isUpcoming)
+      .sort(
+        (a, b) =>
+          new Date(a.date) -
+          new Date(b.date)
+      );
+  }, [schedules]);
+
+  // =========================================================
+  // WEEKLY GRAPH DATA
+  // =========================================================
+
+  const weeklyData = useMemo(() => {
+    const now = new Date();
+
+    return [3, 2, 1, 0].map(
+      (weekIndex) => {
+        const end = new Date(now);
+
+        end.setHours(
+          23,
+          59,
+          59,
+          999
+        );
+
+        end.setDate(
+          now.getDate() -
+            weekIndex * 7
+        );
+
+        const start = new Date(end);
+
+        start.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        start.setDate(
+          end.getDate() - 6
+        );
+
+        const count =
+          completedAppointments.filter(
+            (appointment) => {
+              const date = new Date(
+                appointment.date
+              );
+
+              return (
+                date >= start &&
+                date <= end
+              );
+            }
+          ).length;
+
+        return {
+          label: `Week ${4 - weekIndex}`,
+          count,
+        };
       }
-    }
-    return display;
-  };
+    );
+  }, [completedAppointments]);
 
-  const getIntervalLabel = (timeSlot, intervalKey) => {
-    if (TIME_INTERVALS[timeSlot] && TIME_INTERVALS[timeSlot][intervalKey]) {
-      return TIME_INTERVALS[timeSlot][intervalKey];
-    }
-    return intervalKey; // fallback to the key itself
-  };
-
-  if (loading) return <div className="p-8 text-center">Loading dashboard...</div>;
-
-  const completed = schedules.filter((s) => s.status === "completed").length;
-  const upcoming = schedules.filter((s) => s.status === "booked").length;
-  const rescheduleRequests = schedules.filter(
-    (s) => s.status === "reschedule_requested"
+  const maxGraphValue = Math.max(
+    ...weeklyData.map(
+      (item) => item.count
+    ),
+    1
   );
 
-  // dates for calendar highlights
-  const upcomingDates = schedules
-    .filter((s) => s.status === "booked")
-    .map((s) => new Date(s.date));
+  // =========================================================
+  // CALENDAR
+  // =========================================================
 
-  const chartData = {
-    labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    datasets: [
-      {
-        label: "Sessions Completed",
-        data: [2, 3, 4, completed],
-        borderColor: "#50b89b",
-        backgroundColor: "rgba(80, 184, 155, 0.2)",
-        fill: true,
-        tension: 0.4,
-        pointRadius: 5,
-        pointBackgroundColor: "#50b89b",
-      },
-    ],
+  const year =
+    currentMonth.getFullYear();
+
+  const month =
+    currentMonth.getMonth();
+
+  const firstDay = new Date(
+    year,
+    month,
+    1
+  ).getDay();
+
+  const daysInMonth =
+    new Date(
+      year,
+      month + 1,
+      0
+    ).getDate();
+
+  const calendarDays = [];
+
+  for (
+    let i = 0;
+    i < firstDay;
+    i++
+  ) {
+    calendarDays.push(null);
+  }
+
+  for (
+    let day = 1;
+    day <= daysInMonth;
+    day++
+  ) {
+    calendarDays.push(day);
+  }
+
+  const getAppointmentsForDay = (
+    day
+  ) => {
+    if (!day) {
+      return [];
+    }
+
+    return upcomingAppointments.filter(
+      (appointment) => {
+        const date = new Date(
+          appointment.date
+        );
+
+        return (
+          date.getFullYear() === year &&
+          date.getMonth() === month &&
+          date.getDate() === day
+        );
+      }
+    );
   };
 
-  const chartOptions = {
-    responsive: true,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { grid: { display: false } },
-      y: { beginAtZero: true, ticks: { stepSize: 1 } },
-    },
+  const previousMonth = () => {
+    setCurrentMonth(
+      new Date(
+        year,
+        month - 1,
+        1
+      )
+    );
   };
+
+  const nextMonth = () => {
+    setCurrentMonth(
+      new Date(
+        year,
+        month + 1,
+        1
+      )
+    );
+  };
+
+  // =========================================================
+  // LOADING SCREEN
+  // =========================================================
+
+  if (loading) {
+    return (
+      <div className="practitioner-loading">
+        <div className="loading-spinner"></div>
+
+        <p>
+          Loading practitioner dashboard...
+        </p>
+      </div>
+    );
+  }
+
+  // =========================================================
+  // UI
+  // =========================================================
 
   return (
-    <main className="dashboard-container">
-      <header className="dashboard-header">
-        <div className="welcome-section">
-          <span className="welcome-text">Welcome back,</span>
-          <h1 className="user-name">{user?.name || user?.username || "Practitioner"}</h1>
-          <p className="user-email">{user?.email}</p>
+    <div className="practitioner-dashboard">
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
+      <header className="practitioner-header">
+
+        <div>
+          <p className="welcome-small">
+            Practitioner Dashboard
+          </p>
+
+          <h1>
+            Dr. {user?.name || "Practitioner"}
+          </h1>
+
+          <p className="practitioner-email">
+            {user?.email || ""}
+          </p>
         </div>
+
         <div className="header-actions">
-          <div className="profile-pic-container">
-            <img src="/doctor.png" alt="Profile" className="profile-pic" />
-          </div>
-          <button className="logout-button" onClick={handleLogout}>
+
+          <button
+            className="home-btn"
+            onClick={() => navigate("/")}
+          >
+            Home
+          </button>
+
+          <button
+            className="logout-btn"
+            onClick={handleLogout}
+          >
             Logout
           </button>
+
         </div>
+
       </header>
 
-      {/* Success/Error Messages */}
-      {showSuccess && (
-        <div className={`alert-message ${showSuccess.includes("❌") ? "alert-error" : "alert-success"}`}>
-          {showSuccess}
+      {/* =====================================================
+          SUCCESS MESSAGE
+      ===================================================== */}
+
+      {message && (
+        <div className="success-message">
+          {message}
         </div>
       )}
 
-      {/* Top Cards */}
-      <section className="top-cards-section">
-        <div className="card card-session">
-          <div className="card-content">
-            <h3>Upcoming Sessions</h3>
-            <p>{upcoming} booked</p>
-            {/* Calendar here */}
-            <Calendar
-              tileContent={({ date }) => {
-                const match = upcomingDates.find(
-                  (d) => d.toDateString() === date.toDateString()
-                );
-                if (match) {
-                  const appt = schedules.find(
-                    (s) =>
-                      new Date(s.date).toDateString() === date.toDateString() &&
-                      s.status === "booked"
-                  );
-                  return (
-                    <span className="calendar-badge">
-                      {appt?.patient?.name || appt?.patient?.username || "Patient"}
-                    </span>
-                  );
-                }
-                return null;
-              }}
-            />
+      {/* =====================================================
+          ERROR MESSAGE
+      ===================================================== */}
+
+      {error && (
+        <div className="error-message">
+          {error}
+        </div>
+      )}
+
+      {/* =====================================================
+          STAT CARDS
+      ===================================================== */}
+
+      <section className="stats-grid">
+
+        <div className="stat-card">
+          <div className="stat-icon">
+            📅
+          </div>
+
+          <div>
+            <p>Upcoming Therapies</p>
+
+            <h2>
+              {upcomingAppointments.length}
+            </h2>
           </div>
         </div>
 
-        <div className="card card-progress">
-          <div className="card-content">
-            <div className="progress-header">
-              <i className="fas fa-arrow-up"></i>
-              <h3>Progress</h3>
-            </div>
-            <div className="progress-bar-container">
-              <div
-                className="progress-bar"
-                style={{
-                  width: `${(completed / (completed + upcoming || 1)) * 100}%`,
-                }}
-              ></div>
-            </div>
-            <p>{completed} complete</p>
+        <div className="stat-card">
+          <div className="stat-icon">
+            🟢
+          </div>
+
+          <div>
+            <p>Available Slots</p>
+
+            <h2>
+              {availableSlots.length}
+            </h2>
           </div>
         </div>
 
-        <div className="card card-notifications">
-          <div className="card-content">
-            <div className="notif-header">
-              <i className="fas fa-bell"></i>
-              <h3>Reschedule Requests</h3>
-            </div>
-            <p>{rescheduleRequests.length} pending</p>
+        <div className="stat-card">
+          <div className="stat-icon">
+            👥
+          </div>
+
+          <div>
+            <p>Booked Therapies</p>
+
+            <h2>
+              {bookedAppointments.length}
+            </h2>
           </div>
         </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">
+            ✅
+          </div>
+
+          <div>
+            <p>Completed Therapies</p>
+
+            <h2>
+              {completedAppointments.length}
+            </h2>
+          </div>
+        </div>
+
       </section>
 
-      <section className="main-content">
-        <div className="left-column">
-          <div className="card card-quick-stats">
-            <h3>Quick Stats</h3>
-            <Line data={chartData} options={chartOptions} />
-            <div className="stats-summary">
-              <div className="stat">
-                <span className="stat-value">{completed}</span>
-                <span className="stat-label">Completed</span>
-              </div>
-              <div className="stat">
-                <span className="stat-value">{upcoming}</span>
-                <span className="stat-label">Upcoming</span>
-              </div>
+      {/* =====================================================
+          GRAPH + CALENDAR
+      ===================================================== */}
+
+      <section className="dashboard-grid">
+
+        {/* ===================================================
+            THERAPY GRAPH
+        =================================================== */}
+
+        <div className="dashboard-card graph-card">
+
+          <div className="card-header">
+
+            <div>
+              <h2>
+                Therapies Given
+              </h2>
+
+              <p>
+                Completed therapy sessions
+                over the last 4 weeks
+              </p>
             </div>
+
+            <span className="card-number">
+              {completedAppointments.length}
+            </span>
+
           </div>
 
-          <div className="card card-create-slot">
-            <h3>Create 4-Hour Availability Block</h3>
-            <p className="slot-info">
-              Patients can book specific 2-hour intervals within your 4-hour blocks:<br/>
-              • Morning (8AM-12PM): 8-10AM or 10AM-12PM<br/>
-              • Afternoon (12-5PM): 12-2PM or 3-5PM<br/>
-              • Evening (5-8PM): 5-6:30PM or 6:30-8PM
-            </p>
-            <form onSubmit={handleCreateSlot}>
-              <label>Select Date:</label>
-              <input
-                type="date"
-                value={newSlotDate}
-                onChange={(e) => setNewSlotDate(e.target.value)}
-                min={new Date().toISOString().slice(0, 10)}
-                required
-              />
-              
-              <label>Select 4-Hour Time Block:</label>
-              <select
-                value={newSlotTimeSlot}
-                onChange={(e) => setNewSlotTimeSlot(e.target.value)}
-                required
-              >
-                <option value="">-- Choose Time Block --</option>
-                {Object.entries(TIME_SLOTS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label} (4-hour block)
-                  </option>
-                ))}
-              </select>
-              
-              <button type="submit" className="btn-submit">Create Availability Block</button>
-            </form>
+          <div className="bar-chart">
+
+            {weeklyData.map(
+              (week) => (
+                <div
+                  className="bar-column"
+                  key={week.label}
+                >
+
+                  <span className="bar-value">
+                    {week.count}
+                  </span>
+
+                  <div
+                    className="bar"
+                    style={{
+                      height: `${Math.max(
+                        (week.count /
+                          maxGraphValue) *
+                          180,
+                        week.count > 0
+                          ? 20
+                          : 4
+                      )}px`,
+                    }}
+                  ></div>
+
+                  <span className="bar-label">
+                    {week.label}
+                  </span>
+
+                </div>
+              )
+            )}
+
           </div>
+
         </div>
 
-        <div className="right-column">
-          <div className="card card-reschedule">
-            <h3>Reschedule Requests</h3>
-            {rescheduleRequests.length > 0 ? (
-              rescheduleRequests.map((req) => (
-                <div key={req.id} className="reschedule-item">
-                  <p>
-                    <strong>Patient:</strong> {req.patient?.name || req.patient?.username || "Unknown"}<br/>
-                    <strong>Current:</strong> {formatSlotDisplay(req)}<br/>
-                    <strong>Requested:</strong> {new Date(req.rescheduleDate).toLocaleDateString()} - {
-                      req.rescheduleInterval 
-                        ? getIntervalLabel(req.rescheduleTimeSlot, req.rescheduleInterval)
-                        : TIME_SLOTS[req.rescheduleTimeSlot] || req.rescheduleTimeSlot
-                    }<br/>
-                    {req.reason && <><strong>Reason:</strong> {req.reason}</>}
-                  </p>
-                  <div className="reschedule-actions">
-                    <button 
-                      onClick={() => handleApprove(req.id)}
-                      className="btn-approve"
-                    >
-                      Approve
-                    </button>
-                    <button 
-                      onClick={() => handleReject(req.id)}
-                      className="btn-reject"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p>No reschedule requests.</p>
-            )}
+        {/* ===================================================
+            UPCOMING CALENDAR
+        =================================================== */}
+
+        <div className="dashboard-card calendar-card">
+
+          <div className="card-header">
+
+            <div>
+              <h2>
+                Upcoming Therapies
+              </h2>
+
+              <p>
+                Scheduled patient appointments
+              </p>
+            </div>
+
           </div>
 
-          <div className="card card-appointments">
-            <h3>All Appointments</h3>
-            <div className="appointments-scroll">
-              {schedules.length === 0 ? (
-                <p className="slot-info">No appointments yet.</p>
-              ) : (
-                schedules.map((s) => (
-                  <div key={s.id} className="appointment-item">
-                    <p>
-                      <strong>{formatSlotDisplay(s)}</strong><br/>
-                      Patient: {s.patient ? (s.patient.name || s.patient.username) : "Available slot"}<br/>
-                      Status: <span className={`status status-${s.status}`}>({s.status})</span>
-                      {s.notes && <><br/>Notes: {s.notes}</>}
-                    </p>
-                    {s.status === "booked" && (
-                      <button 
-                        onClick={() => handleComplete(s.id)}
-                        className="btn-complete"
-                      >
-                        Mark Completed
-                      </button>
+          <div className="calendar-navigation">
+
+            <button
+              onClick={previousMonth}
+              type="button"
+            >
+              ‹
+            </button>
+
+            <strong>
+              {currentMonth.toLocaleDateString(
+                "en-US",
+                {
+                  month: "long",
+                  year: "numeric",
+                }
+              )}
+            </strong>
+
+            <button
+              onClick={nextMonth}
+              type="button"
+            >
+              ›
+            </button>
+
+          </div>
+
+          <div className="calendar-weekdays">
+
+            {[
+              "Sun",
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri",
+              "Sat",
+            ].map((day) => (
+              <span key={day}>
+                {day}
+              </span>
+            ))}
+
+          </div>
+
+          <div className="calendar-grid">
+
+            {calendarDays.map(
+              (day, index) => {
+                const appointments =
+                  getAppointmentsForDay(
+                    day
+                  );
+
+                return (
+                  <div
+                    key={index}
+                    className={`calendar-day ${
+                      appointments.length > 0
+                        ? "has-appointment"
+                        : ""
+                    }`}
+                  >
+
+                    {day && (
+                      <>
+                        <span>
+                          {day}
+                        </span>
+
+                        {appointments.length >
+                          0 && (
+                          <div className="appointment-dot">
+                            {appointments.length}
+                          </div>
+                        )}
+
+                      </>
                     )}
+
+                  </div>
+                );
+              }
+            )}
+
+          </div>
+
+          {/* NEXT SESSIONS */}
+
+          <div className="calendar-appointments">
+
+            <h3>
+              Next Sessions
+            </h3>
+
+            {upcomingAppointments.length ===
+            0 ? (
+              <p className="empty-text">
+                No upcoming therapies.
+              </p>
+            ) : (
+              upcomingAppointments
+                .slice(0, 4)
+                .map((appointment) => (
+                  <div
+                    className="mini-appointment"
+                    key={
+                      appointment._id ||
+                      appointment.id
+                    }
+                  >
+
+                    <div>
+                      <strong>
+                        {formatDate(
+                          appointment.date
+                        )}
+                      </strong>
+
+                      <span>
+                        {getTimeSlotLabel(
+                          appointment.timeSlot
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="patient-name">
+                      {getPatientName(
+                        appointment
+                      )}
+                    </div>
+
                   </div>
                 ))
-              )}
-            </div>
+            )}
+
           </div>
+
         </div>
+
       </section>
-    </main>
+
+      {/* =====================================================
+          CREATE THERAPY SLOT
+      ===================================================== */}
+
+      <section className="dashboard-card create-slot-card">
+
+        <div className="card-header">
+
+          <div>
+            <h2>
+              Create Therapy Slot
+            </h2>
+
+            <p>
+              Add a new available Panchakarma
+              therapy slot
+            </p>
+          </div>
+
+        </div>
+
+        <form
+          className="slot-form"
+          onSubmit={handleCreateSlot}
+        >
+
+          <div className="form-group">
+
+            <label htmlFor="therapy-date">
+              Therapy Date
+            </label>
+
+            <input
+              id="therapy-date"
+              type="date"
+              name="date"
+              value={slotForm.date}
+              onChange={handleSlotChange}
+              min={
+                new Date()
+                  .toISOString()
+                  .split("T")[0]
+              }
+              required
+            />
+
+          </div>
+
+          <div className="form-group">
+
+            <label htmlFor="time-slot">
+              Time Slot
+            </label>
+
+            <select
+              id="time-slot"
+              name="timeSlot"
+              value={slotForm.timeSlot}
+              onChange={handleSlotChange}
+              required
+            >
+
+              <option value="">
+                -- Select Time Slot --
+              </option>
+
+              <option value="morning">
+                Morning — 8 AM - 12 PM
+              </option>
+
+              <option value="afternoon">
+                Afternoon — 12 PM - 5 PM
+              </option>
+
+              <option value="evening">
+                Evening — 5 PM - 8 PM
+              </option>
+
+            </select>
+
+          </div>
+
+          <button
+            type="submit"
+            className="create-slot-btn"
+            disabled={creatingSlot}
+          >
+            {creatingSlot
+              ? "Creating..."
+              : "+ Create Therapy Slot"}
+          </button>
+
+        </form>
+
+      </section>
+
+      {/* =====================================================
+          AVAILABLE SLOTS
+      ===================================================== */}
+
+      <section className="dashboard-card">
+
+        <div className="card-header">
+
+          <div>
+            <h2>
+              My Therapy Slots
+            </h2>
+
+            <p>
+              Slots currently available
+              for patients
+            </p>
+          </div>
+
+          <span className="badge green">
+            {availableSlots.length} Available
+          </span>
+
+        </div>
+
+        {availableSlots.length === 0 ? (
+          <div className="empty-state">
+
+            <div className="empty-icon">
+              📅
+            </div>
+
+            <h3>
+              No available slots
+            </h3>
+
+            <p>
+              Create a new therapy slot above.
+            </p>
+
+          </div>
+        ) : (
+
+          <div className="slot-list">
+
+            {availableSlots.map(
+              (slot) => (
+
+                <div
+                  className="slot-item"
+                  key={
+                    slot._id ||
+                    slot.id
+                  }
+                >
+
+                  <div className="slot-date">
+
+                    <strong>
+                      {formatDate(
+                        slot.date
+                      )}
+                    </strong>
+
+                    <span>
+                      {getTimeSlotLabel(
+                        slot.timeSlot
+                      )}
+                    </span>
+
+                  </div>
+
+                  <span className="status-badge available">
+                    Available
+                  </span>
+
+                </div>
+
+              )
+            )}
+
+          </div>
+
+        )}
+
+      </section>
+
+      {/* =====================================================
+          PATIENT APPOINTMENTS
+      ===================================================== */}
+
+      <section className="dashboard-card">
+
+        <div className="card-header">
+
+          <div>
+            <h2>
+              Patient Appointments
+            </h2>
+
+            <p>
+              Therapies booked by your patients
+            </p>
+          </div>
+
+          <span className="badge blue">
+            {bookedAppointments.length} Booked
+          </span>
+
+        </div>
+
+        {bookedAppointments.length ===
+        0 ? (
+
+          <div className="empty-state">
+
+            <div className="empty-icon">
+              👥
+            </div>
+
+            <h3>
+              No booked therapies
+            </h3>
+
+            <p>
+              Patient appointments will
+              appear here.
+            </p>
+
+          </div>
+
+        ) : (
+
+          <div className="appointment-list">
+
+            {bookedAppointments.map(
+              (appointment) => (
+
+                <div
+                  className="appointment-item"
+                  key={
+                    appointment._id ||
+                    appointment.id
+                  }
+                >
+
+                  <div className="appointment-info">
+
+                    <div className="patient-avatar">
+                      {getPatientName(
+                        appointment
+                      )
+                        .charAt(0)
+                        .toUpperCase()}
+                    </div>
+
+                    <div>
+
+                      <h3>
+                        {getPatientName(
+                          appointment
+                        )}
+                      </h3>
+
+                      <p>
+                        {getPatientEmail(
+                          appointment
+                        )}
+                      </p>
+
+                      <span>
+                        {formatDate(
+                          appointment.date
+                        )}
+                        {" • "}
+                        {getTimeSlotLabel(
+                          appointment.timeSlot
+                        )}
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                  <button
+                    className="complete-btn"
+                    onClick={() =>
+                      markCompleted(
+                        appointment._id ||
+                          appointment.id
+                      )
+                    }
+                    disabled={
+                      actionLoading
+                    }
+                  >
+                    {actionLoading
+                      ? "Processing..."
+                      : "✓ Mark Completed"}
+                  </button>
+
+                </div>
+
+              )
+            )}
+
+          </div>
+
+        )}
+
+      </section>
+
+      {/* =====================================================
+          RESCHEDULE REQUESTS
+      ===================================================== */}
+
+      <section className="dashboard-card">
+
+        <div className="card-header">
+
+          <div>
+            <h2>
+              Reschedule Requests
+            </h2>
+
+            <p>
+              Review requests from patients
+            </p>
+          </div>
+
+          <span className="badge orange">
+            {rescheduleRequests.length} Pending
+          </span>
+
+        </div>
+
+        {rescheduleRequests.length ===
+        0 ? (
+
+          <div className="empty-state small">
+
+            <h3>
+              No pending requests
+            </h3>
+
+            <p>
+              You have no reschedule requests.
+            </p>
+
+          </div>
+
+        ) : (
+
+          <div className="request-list">
+
+            {rescheduleRequests.map(
+              (request) => (
+
+                <div
+                  className="request-item"
+                  key={
+                    request._id ||
+                    request.id
+                  }
+                >
+
+                  <div>
+
+                    <h3>
+                      {getPatientName(
+                        request
+                      )}
+                    </h3>
+
+                    <p>
+                      Current appointment:
+                      {" "}
+                      {formatDate(
+                        request.date
+                      )}
+                      {" • "}
+                      {getTimeSlotLabel(
+                        request.timeSlot
+                      )}
+                    </p>
+
+                    <p className="requested-time">
+                      Requested:
+                      {" "}
+                      {request.rescheduleDate
+                        ? formatDate(
+                            request.rescheduleDate
+                          )
+                        : "-"}
+                      {" • "}
+                      {getTimeSlotLabel(
+                        request.rescheduleTimeSlot
+                      )}
+                    </p>
+
+                    {request.reason && (
+                      <p className="reason">
+                        Reason:{" "}
+                        {request.reason}
+                      </p>
+                    )}
+
+                  </div>
+
+                  <div className="request-actions">
+
+                    <button
+                      className="approve-btn"
+                      onClick={() =>
+                        approveReschedule(
+                          request._id ||
+                            request.id
+                        )
+                      }
+                      disabled={
+                        actionLoading
+                      }
+                    >
+                      ✓ Approve
+                    </button>
+
+                    <button
+                      className="reject-btn"
+                      onClick={() =>
+                        rejectReschedule(
+                          request._id ||
+                            request.id
+                        )
+                      }
+                      disabled={
+                        actionLoading
+                      }
+                    >
+                      ✕ Reject
+                    </button>
+
+                  </div>
+
+                </div>
+
+              )
+            )}
+
+          </div>
+
+        )}
+
+      </section>
+
+      {/* =====================================================
+          THERAPY HISTORY
+      ===================================================== */}
+
+      <section className="dashboard-card">
+
+        <div className="card-header">
+
+          <div>
+            <h2>
+              Therapy History
+            </h2>
+
+            <p>
+              Previously completed therapies
+            </p>
+          </div>
+
+          <span className="badge purple">
+            {completedAppointments.length}{" "}
+            Completed
+          </span>
+
+        </div>
+
+        {completedAppointments.length ===
+        0 ? (
+
+          <div className="empty-state small">
+
+            <h3>
+              No completed therapies yet
+            </h3>
+
+            <p>
+              Completed patient sessions
+              will appear here.
+            </p>
+
+          </div>
+
+        ) : (
+
+          <div className="history-list">
+
+            {completedAppointments.map(
+              (appointment) => (
+
+                <div
+                  className="history-item"
+                  key={
+                    appointment._id ||
+                    appointment.id
+                  }
+                >
+
+                  <div>
+
+                    <strong>
+                      {getPatientName(
+                        appointment
+                      )}
+                    </strong>
+
+                    <span>
+                      {getPatientEmail(
+                        appointment
+                      )}
+                    </span>
+
+                  </div>
+
+                  <div className="history-date">
+
+                    <strong>
+                      {formatDate(
+                        appointment.date
+                      )}
+                    </strong>
+
+                    <span>
+                      {getTimeSlotLabel(
+                        appointment.timeSlot
+                      )}
+                    </span>
+
+                  </div>
+
+                  <span className="status-badge completed">
+                    Completed
+                  </span>
+
+                </div>
+
+              )
+            )}
+
+          </div>
+
+        )}
+
+      </section>
+
+    </div>
   );
 };
+
 export default PractitionerDashboard;

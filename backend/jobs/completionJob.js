@@ -1,42 +1,188 @@
 // jobs/completionJob.js
+
 import cron from "node-cron";
-import { Op } from "sequelize";
 import Schedule from "../models/schedule.js";
-import User from "../models/users.js";
-import { sendSms, sendEmail } from "../services/notificationService.js";
+import {
+  sendSms,
+  sendEmail,
+} from "../services/notificationService.js";
 
+// =========================================================
+// COMPLETION CRON JOB
 // Runs every 30 minutes
+// =========================================================
+
 cron.schedule("*/30 * * * *", async () => {
-  console.log("Running completion job...");
+  console.log("⏰ Running completion job...");
 
-  const now = new Date();
+  try {
+    const now = new Date();
 
-  // Find past booked appointments
-  const pastAppointments = await Schedule.findAll({
-    where: {
+    // =======================================================
+    // FIND PAST BOOKED APPOINTMENTS
+    // =======================================================
+
+    const pastAppointments = await Schedule.find({
       status: "booked",
-      date: { [Op.lt]: now },
-    },
-  });
 
-  for (const appt of pastAppointments) {
-    const patient = await User.findByPk(appt.patientId);
-    const practitioner = await User.findByPk(appt.practitionerId);
+      date: {
+        $lt: now,
+      },
+    })
+      .populate(
+        "patientId",
+        "name email phone"
+      )
+      .populate(
+        "practitionerId",
+        "name email phone"
+      );
 
-    const message = `Your appointment on ${appt.date.toLocaleString()} has been marked as completed.`;
+    console.log(
+      `📅 Found ${pastAppointments.length} past appointment(s).`
+    );
 
-    if (patient) {
-      if (patient.phone) await sendSms(patient.phone, message);
-      if (patient.email) await sendEmail(patient.email, "Appointment Completed", message);
+    // =======================================================
+    // PROCESS EACH APPOINTMENT
+    // =======================================================
+
+    for (const appointment of pastAppointments) {
+      try {
+        const appointmentDate =
+          new Date(appointment.date);
+
+        const message =
+          `Your Panchakarma therapy appointment on ` +
+          `${appointmentDate.toLocaleString(
+            "en-IN"
+          )} has been marked as completed.`;
+
+        const patient =
+          appointment.patientId;
+
+        const practitioner =
+          appointment.practitionerId;
+
+        // ===================================================
+        // PATIENT NOTIFICATION
+        // ===================================================
+
+        if (patient) {
+          // SMS
+          if (patient.phone) {
+            try {
+              await sendSms(
+                patient.phone,
+                message
+              );
+
+              console.log(
+                `📱 Completion SMS sent to patient: ${patient.email}`
+              );
+            } catch (error) {
+              console.error(
+                "❌ Patient SMS failed:",
+                error.message
+              );
+            }
+          }
+
+          // Email
+          if (patient.email) {
+            try {
+              await sendEmail(
+                patient.email,
+                "Appointment Completed",
+                message
+              );
+
+              console.log(
+                `📧 Completion email sent to patient: ${patient.email}`
+              );
+            } catch (error) {
+              console.error(
+                "❌ Patient email failed:",
+                error.message
+              );
+            }
+          }
+        }
+
+        // ===================================================
+        // PRACTITIONER NOTIFICATION
+        // ===================================================
+
+        if (practitioner) {
+          // SMS
+          if (practitioner.phone) {
+            try {
+              await sendSms(
+                practitioner.phone,
+                message
+              );
+
+              console.log(
+                `📱 Completion SMS sent to practitioner: ${practitioner.email}`
+              );
+            } catch (error) {
+              console.error(
+                "❌ Practitioner SMS failed:",
+                error.message
+              );
+            }
+          }
+
+          // Email
+          if (practitioner.email) {
+            try {
+              await sendEmail(
+                practitioner.email,
+                "Appointment Completed",
+                message
+              );
+
+              console.log(
+                `📧 Completion email sent to practitioner: ${practitioner.email}`
+              );
+            } catch (error) {
+              console.error(
+                "❌ Practitioner email failed:",
+                error.message
+              );
+            }
+          }
+        }
+
+        // ===================================================
+        // UPDATE APPOINTMENT STATUS
+        // ===================================================
+
+        appointment.status = "completed";
+
+        await appointment.save();
+
+        console.log(
+          `✅ Appointment ${appointment._id} marked as completed.`
+        );
+      } catch (error) {
+        console.error(
+          `❌ Failed to process appointment ${appointment._id}:`,
+          error.message
+        );
+      }
     }
-
-    if (practitioner) {
-      if (practitioner.phone) await sendSms(practitioner.phone, message);
-      if (practitioner.email) await sendEmail(practitioner.email, "Appointment Completed", message);
-    }
-
-    // Update status
-    appt.status = "completed";
-    await appt.save();
+  } catch (error) {
+    console.error(
+      "❌ Completion cron job failed:",
+      error.message
+    );
   }
 });
+
+// =========================================================
+// JOB INITIALIZED
+// =========================================================
+
+console.log(
+  "✅ Appointment completion cron job initialized"
+);

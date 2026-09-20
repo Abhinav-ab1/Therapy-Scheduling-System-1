@@ -1,94 +1,78 @@
-import { DataTypes } from "sequelize";
-import sequelize from "../config/db.js";
+import mongoose from "mongoose";
 
-const Schedule = sequelize.define(
-  "Schedule",
+const scheduleSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-    },
-
     practitionerId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: "users", // refers to User table
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
 
     patientId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
 
     date: {
-      type: DataTypes.DATE,
-      allowNull: false,
+      type: Date,
+      required: true,
     },
 
     timeSlot: {
-      type: DataTypes.ENUM('morning', 'afternoon', 'evening'),
-      allowNull: false,
-      comment: 'morning: 8AM-12PM, afternoon: 12PM-5PM, evening: 5PM-8PM'
+      type: String,
+      enum: ["morning", "afternoon", "evening"],
+      required: true,
     },
 
     status: {
-      type: DataTypes.ENUM(
+      type: String,
+      enum: [
         "available",
         "booked",
         "reschedule_requested",
         "completed",
-        "cancelled"
-      ),
-      defaultValue: "available",
-      allowNull: false,
+        "cancelled",
+      ],
+      default: "available",
     },
 
     notes: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      type: String,
+      default: null,
     },
 
-    // Optional fields for reschedule
     rescheduleDate: {
-      type: DataTypes.DATE,
-      allowNull: true,
+      type: Date,
+      default: null,
     },
 
     rescheduleTimeSlot: {
-      type: DataTypes.ENUM('morning', 'afternoon', 'evening'),
-      allowNull: true,
+      type: String,
+      enum: ["morning", "afternoon", "evening"],
+      default: null,
     },
 
     reason: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      type: String,
+      default: null,
     },
 
-    // fields for notifications
     reminderSent: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
+      type: Boolean,
+      default: false,
     },
 
     completionNotified: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
+      type: Boolean,
+      default: false,
     },
   },
   {
-    tableName: "schedules",
     timestamps: true,
   }
 );
 
-// Note: Associations are handled in models/index.js to avoid circular imports
+const Schedule = mongoose.model("Schedule", scheduleSchema);
 
 export default Schedule;

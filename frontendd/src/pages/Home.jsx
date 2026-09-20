@@ -1,24 +1,38 @@
 import React from "react";
+
 import Header from "../components/Header";
 import Hero from "../components/Hero";
 import DifferentiatorSection from "../components/DifferentiatorSection";
 import PanchakarmSection from "../components/PanchakarmSection";
-import "../styles/Home.css";
-import bg from "../assets/bg.png"; //  import the image
+import AIChatbot from "../AIChatbot";
 
-const Home = () => {
+import "../styles/Home.css";
+
+import bg from "../assets/bg.png";
+
+const Home = ({ user, setUser }) => {
   return (
     <div
       className="home"
-      style={{ backgroundImage: `url(${bg})` }} //  use here
+      style={{
+        backgroundImage: `url(${bg})`,
+      }}
     >
-      <Header />
+      <Header
+        user={user}
+        setUser={setUser}
+      />
+
       <main>
         <Hero />
+
         <DifferentiatorSection />
+
         <PanchakarmSection />
-        
       </main>
+
+      {/* AyurSutra AI Assistant */}
+      <AIChatbot />
     </div>
   );
 };

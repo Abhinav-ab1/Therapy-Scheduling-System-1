@@ -1,76 +1,110 @@
-import { DataTypes, Model } from "sequelize";
-import sequelize from "../config/db.js";
+import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
-class User extends Model {
-  //  Compare raw candidate password with stored hashed password
-  async comparePassword(candidatePassword) {
-    if (!this.password) return false; // OAuth / no password case
-    return bcrypt.compare(candidatePassword, this.password);
-  }
-}
-
-User.init(
+const userSchema = new mongoose.Schema(
   {
-    id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
-      primaryKey: true
-    },
     name: {
-      type: DataTypes.STRING(50),
-      allowNull: false
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50,
     },
+
     phone: {
-      type: DataTypes.STRING(15),
-      allowNull: true,
-      validate: { isNumeric: true, len: [10, 15] }
+      type: String,
+      trim: true,
+      maxlength: 15,
+      default: null,
     },
+
     email: {
-      type: DataTypes.STRING(50),
-      allowNull: false,
+      type: String,
+      required: true,
       unique: true,
-      validate: { isEmail: true }
+      lowercase: true,
+      trim: true,
     },
+
     profileImage: {
-      type: DataTypes.STRING,
-      allowNull: true
+      type: String,
+      default: null,
     },
+
     password: {
-      type: DataTypes.STRING,
-      allowNull: true // null for OAuth users
+      type: String,
+      default: null,
     },
+
     role: {
-      type: DataTypes.ENUM("patient", "practitioner", "admin"),
-      allowNull: false,
-      defaultValue: "patient"
+      type: String,
+      enum: ["patient", "practitioner", "admin"],
+      default: "patient",
+      required: true,
     },
-   // isVerified: {
-    //  type: DataTypes.BOOLEAN,
-    //  defaultValue: true //admin ke baad false karna hai
-    //}
+
+    dob: {
+      type: Date,
+      default: null,
+    },
+
+    isVerified: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
-    sequelize,
-    tableName: "users",
-    modelName: "User",
     timestamps: true,
-    hooks: {
-      //  Hash password only when it’s new/changed
-      beforeCreate: async (user) => {
-        if (user.password && !user.password.startsWith("$2b$")) {
-          const salt = await bcrypt.genSalt(10);
-          user.password = await bcrypt.hash(user.password, salt);
-        }
-      },
-      beforeUpdate: async (user) => {
-        if (user.changed("password") && user.password && !user.password.startsWith("$2b$")) {
-          const salt = await bcrypt.genSalt(10);
-          user.password = await bcrypt.hash(user.password, salt);
-        }
-      }
-    }
   }
 );
+
+// ==========================================
+// HASH PASSWORD BEFORE SAVING
+// ==========================================
+
+userSchema.pre("save", async function () {
+  // Don't hash password again if it wasn't changed
+  if (!this.isModified("password")) {
+    return;
+  }
+
+  // OAuth users may not have a password
+  if (!this.password) {
+    return;
+  }
+
+  const salt = await bcrypt.genSalt(10);
+
+  this.password = await bcrypt.hash(this.password, salt);
+});
+
+// ==========================================
+// COMPARE PASSWORD
+// ==========================================
+
+userSchema.methods.comparePassword = async function (candidatePassword) {
+  if (!this.password) {
+    return false;
+  }
+
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+// ==========================================
+// REMOVE PASSWORD FROM JSON RESPONSE
+// ==========================================
+
+userSchema.methods.toJSON = function () {
+  const user = this.toObject();
+
+  delete user.password;
+
+  return user;
+};
+
+// ==========================================
+// CREATE MODEL
+// ==========================================
+
+const User = mongoose.model("User", userSchema);
 
 export default User;
